@@ -1,491 +1,376 @@
 <template>
-  <div class="position-relative">
-    <template v-if="isDataLoading">
-      <slot name="loading">
-        Loading...
-      </slot>
-    </template>
-    <template v-else>
-      <template v-if="isDataComputing">
-        <slot name="computing">
-          <div class="position-absolute w-100 h-100 text-center" style="z-index: 1;">
-            <div class="position-sticky d-inline-block mt-5 p-3" style="top: 0;">
-              Loading table values...
-            </div>
-          </div>
-        </slot>
-      </template>
-
-      <div v-if="data.length === 0 || (rows.length === 0 && cols.length === 0)" class="alert alert-warning" role="alert">
-        {{ noDataWarningText }}
-      </div>
-
-      <div v-else-if="cols.length && rows.length" class="table-responsive">
-        <table class="table table-bordered" :aria-busy="isDataLoading || isDataComputing">
-
-          <!-- Table header -->
-          <thead>
-            <template
-              v-for="(colField, colFieldIndex) in internalColFields"
-              v-if="colField.showHeader === undefined || colField.showHeader"
-              >
-              <!-- Multiple slots -->
-              <template v-if="colField.headerSlotNames">
-                <tr v-for="(headerSlotName, headerSlotNameIndex) in colField.headerSlotNames">
-                  <!-- Top left dead zone -->
-                  <th
-                    v-if="colFieldIndex === firstColFieldHeaderIndex && rowHeaderSize > 0 && headerSlotNameIndex === 0"
-                    :colspan="rowHeaderSize"
-                    :rowspan="colHeaderSize"
+    <div class="table-responsive-no-bootstrap">
+        <template v-if="isDataLoading">
+            <slot name="loading"> Loading... </slot>
+        </template>
+        <div v-else-if="data.length === 0" class="alert alert-warning" role="alert">
+            {{ noDataWarningText }}
+        </div>
+        <table v-else class="table table-bordered-no-bootstrap">
+            <!-- Table header -->
+            <thead>
+                <tr
+                    v-for="(colField, colFieldIndex) in colFields"
+                    :key="colField.key"
+                    v-if="colField.showHeader === undefined || colField.showHeader"
+                >
+                    <!-- Top left dead zone -->
+                    <th
+                        v-if="colFieldIndex === firstColFieldHeaderIndex && rowHeaderSize > 0"
+                        :colspan="rowHeaderSize"
+                        :rowspan="colHeaderSize"
                     ></th>
-                  <!-- Column headers -->
-                  <th
-                    v-for="(col, colIndex) in sortedCols"
-                    :key="JSON.stringify(col)"
-                    :colspan="spanSize(sortedCols, colIndex, colFieldIndex)"
-                    v-if="spanSize(sortedCols, colIndex, colFieldIndex) !== 0"
+                    <!-- Column headers -->
+                    <th
+                        v-for="(col, colIndex) in cols"
+                        :key="JSON.stringify(col)"
+                        :colspan="spanSize(cols, colFieldIndex, colIndex)"
+                        v-if="spanSize(cols, colFieldIndex, colIndex) !== 0"
                     >
-                    <slot :name="headerSlotName" v-bind:value="col[colFieldIndex]">
-                      Missing slot <code>{{ headerSlotName }}</code>
-                    </slot>
-                  </th>
-                  <!-- Top right dead zone -->
-                  <th
-                    v-if="colFieldIndex === firstColFieldHeaderIndex && rowFooterSize > 0 && headerSlotNameIndex === 0"
-                    :colspan="rowFooterSize"
-                    :rowspan="colFooterSize"
+                        <slot v-if="colField.headerSlotName" :name="colField.headerSlotName" v-bind:value="col[colFieldIndex]">
+                            Missing slot <code>{{ colField.headerSlotName }}</code>
+                        </slot>
+                        <template v-else>
+                            {{ col[colFieldIndex] }}
+                        </template>
+                    </th>
+                    <!-- Top right dead zone -->
+                    <th
+                        v-if="colFieldIndex === firstColFieldHeaderIndex && rowFooterSize > 0"
+                        :colspan="rowFooterSize"
+                        :rowspan="colFooterSize"
                     ></th>
                 </tr>
-              </template>
-              <!-- Single slot/no slot -->
-              <tr v-else>
-                <!-- Top left dead zone -->
-                <th
-                  v-if="colFieldIndex === firstColFieldHeaderIndex && rowHeaderSize > 0"
-                  :colspan="rowHeaderSize"
-                  :rowspan="colHeaderSize"
-                  ></th>
-                <!-- Column headers -->
-                <th
-                  v-for="(col, colIndex) in sortedCols"
-                  :key="JSON.stringify(col)"
-                  :colspan="spanSize(sortedCols, colIndex, colFieldIndex)"
-                  v-if="spanSize(sortedCols, colIndex, colFieldIndex) !== 0"
-                  >
-                  <slot v-if="colField.headerSlotName" :name="colField.headerSlotName" v-bind:value="col[colFieldIndex]">
-                    Missing slot <code>{{ colField.headerSlotName }}</code>
-                  </slot>
-                  <template v-else>
-                    {{ col[colFieldIndex] }}
-                  </template>
-                </th>
-                <!-- Top right dead zone -->
-                <th
-                  v-if="colFieldIndex === firstColFieldHeaderIndex && rowFooterSize > 0"
-                  :colspan="rowFooterSize"
-                  :rowspan="colFooterSize"
-                  ></th>
-              </tr>
-            </template>
-          </thead>
+            </thead>
 
-          <!-- Table body -->
-          <tbody>
-            <tr v-for="(row, rowIndex) in sortedRows" :key="JSON.stringify(row)">
-              <!-- Row headers -->
-              <template
-                v-for="(rowField, rowFieldIndex) in internalRowFields"
-                v-if="(rowField.showHeader === undefined || rowField.showHeader) && spanSize(sortedRows, rowIndex, rowFieldIndex) !== 0"
-                >
-                <!-- Multiple slots -->
-                <template v-if="rowField.headerSlotNames">
-                  <th
-                    v-for="headerSlotName in rowField.headerSlotNames"
-                    :rowspan="spanSize(sortedRows, rowIndex, rowFieldIndex)">
-                    <slot :name="headerSlotName" v-bind:value="row[rowFieldIndex]">
-                      Missing slot <code>{{ headerSlotName }}</code>
-                    </slot>
-                  </th>
-                </template>
-                <!-- Single slot/no slot -->
-                <th v-else :rowspan="spanSize(sortedRows, rowIndex, rowFieldIndex)">
-                  <slot v-if="rowField.headerSlotName" :name="rowField.headerSlotName" v-bind:value="row[rowFieldIndex]">
-                    Missing slot <code>{{ rowField.headerSlotName }}</code>
-                  </slot>
-                  <template v-else>
-                    {{ row[rowFieldIndex] }}
-                  </template>
-                </th>
-              </template>
-              <!-- Values -->
-              <td
-                v-for="col in sortedCols"
-                :key="JSON.stringify(col)"
-                class="text-right"
-                >
-                <slot v-if="$scopedSlots.value" name="value" :value="value(row, col)" :row="Object.values(row)" :col="Object.values(col)" />
-                <template v-else>{{ value(row, col) }}</template>
-              </td>
-              <!-- Row footers (if slots are provided) -->
-              <template
-                v-for="(rowField, rowFieldIndex) in internalRowFieldsReverse"
-                v-if="rowField.showFooter && spanSize(rows, rowIndex, internalRowFields.length - rowFieldIndex - 1) !== 0"
-                >
-                <!-- Multiple slots -->
-                <template v-if="rowField.footerSlotNames">
-                  <th
-                    v-for="footerSlotName in rowField.footerSlotNames"
-                    :rowspan="spanSize(rows, rowIndex, internalRowFields.length - rowFieldIndex - 1)">
-                    <slot :name="footerSlotName" v-bind:value="row[internalRowFields.length - rowFieldIndex - 1]">
-                      Missing slot <code>{{ footerSlotName }}</code>
-                    </slot>
-                  </th>
-                </template>
-                <!-- Single slot/no slot -->
-                <th v-else :rowspan="spanSize(rows, rowIndex, internalRowFields.length - rowFieldIndex - 1)">
-                  <slot v-if="rowField.footerSlotName" :name="rowField.footerSlotName" v-bind:value="row[internalRowFields.length - rowFieldIndex - 1]">
-                    Missing slot <code>{{ rowField.footerSlotName }}</code>
-                  </slot>
-                  <template v-else>
-                    {{ row[internalRowFields.length - rowFieldIndex - 1] }}
-                  </template>
-                </th>
-              </template>
-            </tr>
-          </tbody>
+            <!-- Table body -->
+            <tbody>
+                <tr v-for="(row, rowIndex) in rows" :key="JSON.stringify(row)">
+                    <!-- Row headers -->
+                    <th
+                        v-for="(rowField, rowFieldIndex) in rowFields"
+                        :key="rowField.key"
+                        :rowspan="spanSize(rows, rowFieldIndex, rowIndex)"
+                        v-if="
+                            (rowField.showHeader === undefined || rowField.showHeader) &&
+                            spanSize(rows, rowFieldIndex, rowIndex) !== 0
+                        "
+                    >
+                        <slot v-if="rowField.headerSlotName" :name="rowField.headerSlotName" v-bind:value="row[rowFieldIndex]">
+                            Missing slot <code>{{ rowField.headerSlotName }}</code>
+                        </slot>
+                        <template v-else>
+                            {{ row[rowFieldIndex] }}
+                        </template>
+                    </th>
+                    <!-- Values -->
+                    <td v-for="col in cols" :key="JSON.stringify(col)" class="text-right">
+                        <slot v-if="$scopedSlots.value" name="value" v-bind:value="values[JSON.stringify({ col, row })]" />
+                        <template v-else>{{ values[JSON.stringify({ col, row })] }}</template>
+                    </td>
+                    <!-- Row footers (if slots are provided) -->
+                    <th
+                        v-for="(rowField, rowFieldIndex) in rowFieldsReverse"
+                        :key="rowField.key"
+                        :rowspan="spanSize(rows, rowFields.length - rowFieldIndex - 1, rowIndex)"
+                        v-if="rowField.showFooter && spanSize(rows, rowFields.length - 1 - rowFieldIndex, rowIndex) !== 0"
+                    >
+                        <slot
+                            v-if="rowField.footerSlotName"
+                            :name="rowField.footerSlotName"
+                            v-bind:value="row[rowFields.length - rowFieldIndex - 1]"
+                        >
+                            Missing slot <code>{{ rowField.footerSlotName }}</code>
+                        </slot>
+                        <template v-else>
+                            {{ row[rowFields.length - rowFieldIndex - 1] }}
+                        </template>
+                    </th>
+                </tr>
+            </tbody>
 
-          <!-- Table footer -->
-          <tfoot>
-            <template
-              v-for="(colField, colFieldIndex) in internalColFieldsReverse"
-              v-if="colField.showFooter">
-              <!-- Multiple slots -->
-              <template v-if="colField.footerSlotNames">
-                <tr v-for="(footerSlotName, footerSlotNameIndex) in colField.footerSlotNames">
-                  <!-- Bottom left dead zone -->
-                  <th
-                    v-if="colFieldIndex === firstColFieldFooterIndex && rowHeaderSize > 0 && footerSlotNameIndex === 0"
-                    :colspan="rowHeaderSize"
-                    :rowspan="colHeaderSize"></th>
-                  <!-- Column footers -->
-                  <th
-                    v-for="(col, colIndex) in sortedCols"
-                    :key="JSON.stringify(col)"
-                    :colspan="spanSize(sortedCols, colIndex, internalColFields.length - colFieldIndex - 1)"
-                    v-if="spanSize(sortedCols, colIndex, internalColFields.length - colFieldIndex - 1) !== 0">
-                    <slot :name="footerSlotName" v-bind:value="col[internalColFields.length - colFieldIndex - 1]">
-                      Missing slot <code>{{ footerSlotName }}</code>
-                    </slot>
-                  </th>
-                  <!-- Bottom right dead zone -->
-                  <th
-                    v-if="colFieldIndex === firstColFieldFooterIndex && rowFooterSize > 0 && footerSlotNameIndex === 0"
-                    :colspan="rowFooterSize"
-                    :rowspan="colFooterSize"
+            <!-- Table footer -->
+            <tfoot>
+                <tr v-for="(colField, colFieldIndex) in colFieldsReverse" :key="colField.key" v-if="colField.showFooter">
+                    <!-- Bottom left dead zone -->
+                    <th
+                        v-if="colFieldIndex === firstColFieldFooterIndex && rowHeaderSize > 0"
+                        :colspan="rowHeaderSize"
+                        :rowspan="colHeaderSize"
+                    ></th>
+                    <!-- Column footers -->
+                    <th
+                        v-for="(col, colIndex) in cols"
+                        :key="JSON.stringify(col)"
+                        :colspan="spanSize(cols, colFields.length - colFieldIndex - 1, colIndex)"
+                        v-if="spanSize(cols, colFields.length - colFieldIndex - 1, colIndex) !== 0"
+                    >
+                        <slot
+                            v-if="colField.footerSlotName"
+                            :name="colField.footerSlotName"
+                            v-bind:value="col[colFields.length - colFieldIndex - 1]"
+                        >
+                            Missing slot <code>{{ colField.footerSlotName }}</code>
+                        </slot>
+                        <template v-else>
+                            {{ col[colFields.length - colFieldIndex - 1] }}
+                        </template>
+                    </th>
+                    <!-- Bottom right dead zone -->
+                    <th
+                        v-if="colFieldIndex === firstColFieldFooterIndex && rowFooterSize > 0"
+                        :colspan="rowFooterSize"
+                        :rowspan="colFooterSize"
                     ></th>
                 </tr>
-              </template>
-              <!-- Single slot/no slot -->
-              <tr v-else>
-                <!-- Bottom left dead zone -->
-                <th
-                  v-if="colFieldIndex === firstColFieldFooterIndex && rowHeaderSize > 0"
-                  :colspan="rowHeaderSize"
-                  :rowspan="colHeaderSize"></th>
-                <!-- Column footers -->
-                <th
-                  v-for="(col, colIndex) in sortedCols"
-                  :key="JSON.stringify(col)"
-                  :colspan="spanSize(sortedCols, colIndex, internalColFields.length - colFieldIndex - 1)"
-                  v-if="spanSize(sortedCols, colIndex, internalColFields.length - colFieldIndex - 1) !== 0">
-                  <slot v-if="colField.footerSlotName" :name="colField.footerSlotName" v-bind:value="col[internalColFields.length - colFieldIndex - 1]">
-                    Missing slot <code>{{ colField.footerSlotName }}</code>
-                  </slot>
-                  <template v-else>
-                    {{ col[internalColFields.length - colFieldIndex - 1] }}
-                  </template>
-                </th>
-                <!-- Bottom right dead zone -->
-                <th
-                  v-if="colFieldIndex === firstColFieldFooterIndex && rowFooterSize > 0"
-                  :colspan="rowFooterSize"
-                  :rowspan="colFooterSize"
-                  ></th>
-              </tr>
-            </template>
-          </tfoot>
+            </tfoot>
         </table>
-      </div>
-    </template>
-  </div>
+    </div>
 </template>
 
 <script>
-import HashTable from './HashTable'
-import { firstBy } from 'thenby'
-import naturalSort from 'javascript-natural-sort'
-import { cloneDeep, isEqual } from 'lodash'
-
+import naturalSort from 'javascript-natural-sort';
 export default {
-  props: {
-    data: {
-      type: Array,
-      default: () => []
+    props: ['data', 'rowFields', 'colFields', 'reducer', 'noDataWarningText'],
+    props: {
+        data: {
+            type: Array,
+            default: [],
+        },
+        rowFields: {
+            type: Array,
+            default: [],
+        },
+        colFields: {
+            type: Array,
+            default: [],
+        },
+        reducer: {
+            type: Function,
+            default: (sum, item) => sum + 1,
+        },
+        noDataWarningText: {
+            type: String,
+            default: 'No data to display.',
+        },
+        isDataLoading: {
+            type: Boolean,
+            default: false,
+        },
     },
-    rowFields: {
-      type: Array,
-      default: () => []
+    data: function () {
+        return {
+            values: {}, // Alas vue does not support js Map
+        };
     },
-    colFields: {
-      type: Array,
-      default: () => []
-    },
-    reducer: {
-      type: Function,
-      default: (sum, item) => sum + 1
-    },
-    noDataWarningText: {
-      type: String,
-      default: 'No data to display.'
-    },
-    isDataLoading: {
-      type: Boolean,
-      default: false
-    }
-  },
-  data: function() {
-    return {
-      valuesHashTable: null,
-      rows: [],
-      cols: [],
-      // Note: we don't use directly rowFields/colFields props to trigger table render when `updateValues` has finished
-      internalRowFields: [],
-      internalColFields: [],
-      isDataComputing: false,
-      computingInterval: null
-    }
-  },
-  computed: {
-    // Sort rows/cols using a composed function built with thenBy.js
-    sortedRows: function() {
-      let composedSortFunction
-      this.internalRowFields.forEach((rowField, rowFieldIndex) => {
-        if (rowFieldIndex === 0) {
-          composedSortFunction = firstBy(0, { cmp: rowField.sort || naturalSort })
-        } else {
-          composedSortFunction = composedSortFunction.thenBy(rowFieldIndex, { cmp: rowField.sort || naturalSort })
-        }
-      })
-
-      return [...this.rows].sort(composedSortFunction)
-    },
-    sortedCols: function() {
-      let composedSortFunction
-      this.internalColFields.forEach((colField, colFieldIndex) => {
-        if (colFieldIndex === 0) {
-          composedSortFunction = firstBy(0, { cmp: colField.sort || naturalSort })
-        } else {
-          composedSortFunction = composedSortFunction.thenBy(colFieldIndex, { cmp: colField.sort || naturalSort })
-        }
-      })
-
-      return [...this.cols].sort(composedSortFunction)
-    },
-    // Property to watch specific field changes
-    fields: function() {
-      return [
-        [this.colFields, this.rowFields],
-        [this.colFields.map(field => field.headerSlotNames), this.rowFields.map(field => field.headerSlotNames)],
-        [this.colFields.map(field => field.valuesFiltered), this.rowFields.map(field => field.valuesFiltered)]
-      ]
-    },
-    // Reversed props for footer iterators
-    internalRowFieldsReverse: function() {
-      return this.internalRowFields.slice().reverse()
-    },
-    internalColFieldsReverse: function() {
-      return this.internalColFields.slice().reverse()
-    },
-    // Number of row header columns
-    rowHeaderSize: function() {
-      return this.internalRowFields.reduce((acc, rowField) => {
-        if (rowField.showHeader === undefined || rowField.showHeader) {
-          if (rowField.headerSlotNames) return acc + rowField.headerSlotNames.length
-          else return acc + 1
-        }
-        else return acc
-      }, 0)
-    },
-    // Number of row footer columns
-    rowFooterSize: function() {
-      return this.internalRowFields.reduce((acc, rowField) => {
-        if (rowField.showFooter) {
-          if (rowField.footerSlotNames) return acc + rowField.footerSlotNames.length
-          else return acc + 1
-        }
-        else return acc
-      }, 0)
-    },
-    // Number of col header rows
-    colHeaderSize: function() {
-      return this.internalColFields.reduce((acc, colField) => {
-        if (colField.showHeader === undefined || colField.showHeader) {
-          if (colField.headerSlotNames) return acc + colField.headerSlotNames.length
-          else return acc + 1
-        }
-        else return acc
-      }, 0)
-    },
-    // Number of col footer rows
-    colFooterSize: function() {
-      return this.internalColFields.reduce((acc, colField) => {
-        if (colField.showFooter) {
-          if (colField.footerSlotNames) return acc + colField.footerSlotNames.length
-          else return acc + 1
-        }
-        else return acc
-      }, 0)
-    },
-    // Index of the first column field header to show - used for table header dead zones
-    firstColFieldHeaderIndex: function() {
-      return this.internalColFields.findIndex(colField => colField.showHeader === undefined || colField.showHeader)
-    },
-    // Index of the first column field footer to show - used for table footer dead zones
-    firstColFieldFooterIndex: function() {
-      return this.internalColFieldsReverse.findIndex(colField => colField.showFooter)
-    }
-  },
-  methods: {
-    // Get value from valuesHashTable
-    value: function(row, col) {
-      return this.valuesHashTable.get([...row, ...col]) || 0
-    },
-    // Get colspan/rowspan size
-    spanSize: function(values, valueIndex, fieldIndex) {
-      // If left value === current value
-      // and top value === 0 (= still in the same top bracket)
-      // The left td will take care of the display
-      if (valueIndex > 0 &&
-        values[valueIndex - 1][fieldIndex] === values[valueIndex][fieldIndex] &&
-        (fieldIndex === 0 || (this.spanSize(values, valueIndex, fieldIndex - 1) === 0))) {
-        return 0
-      }
-
-      // Otherwise, count entries on the right with the same value
-      // But stop if the top value !== 0 (= the top bracket has changed)
-      let size = 1
-      let i = valueIndex
-      while (i + 1 < values.length &&
-        values[i + 1][fieldIndex] === values[i][fieldIndex] &&
-        (fieldIndex === 0 || (i + 1 < values.length && this.spanSize(values, i + 1, fieldIndex - 1) === 0))) {
-        i++
-        size++
-      }
-
-      return size
-    },
-    // Update rows/cols/valuesHashTable (optional)
-    // @param {boolean} updateValuesHashTable
-    updateValues: function(updateValuesHashTable = true) {
-      this.isDataComputing = true
-
-      // Start a task to avoid blocking the page
-      clearInterval(this.computingInterval)
-      this.computingInterval = setTimeout(() => {
-        const rows = []
-        const cols = []
-        const valuesHashTable = new HashTable()
-
-        const fields = [...this.rowFields, ...this.colFields]
-
-        this.data.forEach(item => {
-          const rowKey = []
-          const colKey = []
-          let filtered = false
-
-          // Check if item passes fields value filters
-          for (let field of fields) {
-            if (field.valuesFiltered && !field.valuesFiltered.has(field.getter(item))) {
-              filtered = true
-              break
+    computed: {
+        cols: function () {
+            const cols = [];
+            const extractColsRecursive = (depth, filters) => {
+                const getter = this.colFields[depth].getter;
+                const sort = this.colFields[depth].sort || naturalSort;
+                const values = [
+                    ...new Set(this.filteredData({ data: this.data, colFilters: filters }).map((item) => getter(item))),
+                ].sort(sort);
+                values.forEach((value) => {
+                    // Build new filter hash
+                    const valueFilters = Object.assign({}, filters);
+                    valueFilters[depth] = value;
+                    // Recursive call
+                    if (depth + 1 < this.colFields.length) {
+                        extractColsRecursive(depth + 1, valueFilters);
+                    } else {
+                        cols.push(valueFilters);
+                    }
+                });
+            };
+            if (this.colFields.length > 0) {
+                extractColsRecursive(0, {});
+            } else {
+                cols.push({});
             }
-          }
-
-          // Build item rowKey/colKey if necessary
-          if (!filtered || updateValuesHashTable) {
-            this.rowFields.forEach(field => {
-              rowKey.push(field.getter(item))
-            })
-
-            this.colFields.forEach(field => {
-              colKey.push(field.getter(item))
-            })
-          }
-
-          // Update rows/cols
-          if (!filtered) {
-            if (!rows.some(row => {
-              return this.rowFields.every((rowField, index) => row[index] === rowKey[index])
-            })) {
-              rows.push(rowKey)
+            return cols;
+        },
+        rows: function () {
+            const rows = [];
+            const extractRowsRecursive = (depth, filters) => {
+                const getter = this.rowFields[depth].getter;
+                const sort = this.rowFields[depth].sort || naturalSort;
+                const values = [
+                    ...new Set(this.filteredData({ data: this.data, rowFilters: filters }).map((item) => getter(item))),
+                ].sort(sort);
+                values.forEach((value) => {
+                    // Build new filter hash
+                    const valueFilters = Object.assign({}, filters);
+                    valueFilters[depth] = value;
+                    // Recursive call
+                    if (depth + 1 < this.rowFields.length) {
+                        extractRowsRecursive(depth + 1, valueFilters);
+                    } else {
+                        rows.push(valueFilters);
+                    }
+                });
+            };
+            if (this.rowFields.length > 0) {
+                extractRowsRecursive(0, {});
+            } else {
+                rows.push({});
             }
-
-            if (!cols.some(col => {
-              return this.colFields.every((colField, index) => col[index] === colKey[index])
-            })) {
-              cols.push(colKey)
+            return rows;
+        },
+        // Compound property for watch single callback
+        colsAndRows: function () {
+            return [this.cols, this.rows];
+        },
+        // Reversed props for footer iterators
+        colFieldsReverse: function () {
+            return this.colFields.slice().reverse();
+        },
+        rowFieldsReverse: function () {
+            return this.rowFields.slice().reverse();
+        },
+        // Number of col header rows
+        colHeaderSize: function () {
+            return this.colFields.filter((colField) => colField.showHeader === undefined || colField.showHeader).length;
+        },
+        // Number of col footer rows
+        colFooterSize: function () {
+            return this.colFields.filter((colField) => colField.showFooter).length;
+        },
+        // Number of row header columns
+        rowHeaderSize: function () {
+            return this.rowFields.filter((rowField) => rowField.showHeader === undefined || rowField.showHeader).length;
+        },
+        // Number of row footer columns
+        rowFooterSize: function () {
+            return this.rowFields.filter((rowField) => rowField.showFooter).length;
+        },
+        // Index of the first column field header to show - used for table header dead zones
+        firstColFieldHeaderIndex: function () {
+            return this.colFields.findIndex((colField) => colField.showHeader === undefined || colField.showHeader);
+        },
+        // Index of the first column field footer to show - used for table footer dead zones
+        firstColFieldFooterIndex: function () {
+            return this.colFieldsReverse.findIndex((colField) => colField.showFooter);
+        },
+    },
+    methods: {
+        // Get data filtered
+        filteredData: function ({ data = [], colFilters = {}, rowFilters = {} }) {
+            // Prepare getters
+            const colGetters = {},
+                rowGetters = {};
+            for (const depth in colFilters) {
+                colGetters[depth] = this.colFields[depth].getter;
             }
-          }
-
-          // Update valuesHashTable
-          if (updateValuesHashTable) {
-            const key = [ ...rowKey, ...colKey ]
-
-            const previousValue = valuesHashTable.get(key) || 0
-
-            valuesHashTable.set(key, this.reducer(previousValue, item))
-          }
-        })
-
-        this.rows = rows
-        this.cols = cols
-        if (updateValuesHashTable) this.valuesHashTable = valuesHashTable
-        this.isDataComputing = false
-        this.updateInternalFields()
-      }, 0)
+            for (const depth in rowFilters) {
+                rowGetters[depth] = this.rowFields[depth].getter;
+            }
+            // Filter data with getters
+            return data.filter((item) => {
+                let keep = true;
+                for (const depth in colFilters) {
+                    if (colGetters[depth](item) !== colFilters[depth]) {
+                        keep = false;
+                        break;
+                    }
+                }
+                if (keep) {
+                    for (const depth in rowFilters) {
+                        if (rowGetters[depth](item) !== rowFilters[depth]) {
+                            keep = false;
+                            break;
+                        }
+                    }
+                }
+                return keep;
+            });
+        },
+        // Get colspan/rowspan size
+        spanSize: function (values, fieldIndex, valueIndex) {
+            // If left value === current value
+            // and top value === 0 (= still in the same top bracket)
+            // The left td will take care of the display
+            if (
+                valueIndex > 0 &&
+                values[valueIndex - 1][fieldIndex] === values[valueIndex][fieldIndex] &&
+                (fieldIndex === 0 || this.spanSize(values, fieldIndex - 1, valueIndex) === 0)
+            ) {
+                return 0;
+            }
+            // Otherwise, count entries on the right with the same value
+            // But stop if the top value !== 0 (= the top bracket has changed)
+            let size = 1;
+            let i = valueIndex;
+            while (
+                i + 1 < values.length &&
+                values[i + 1][fieldIndex] === values[i][fieldIndex] &&
+                (fieldIndex === 0 || (i + 1 < values.length && this.spanSize(values, fieldIndex - 1, i + 1) === 0))
+            ) {
+                i++;
+                size++;
+            }
+            return size;
+        },
+        // Called when cols/rows have changed => recompute values
+        computeValues: function () {
+            // Remove old values
+            this.values = {};
+            // Compute new values
+            this.rows.forEach((row) => {
+                const rowData = this.filteredData({ data: this.data, rowFilters: row });
+                this.cols.forEach((col) => {
+                    const data = this.filteredData({ data: rowData, colFilters: col });
+                    const key = JSON.stringify({ col, row });
+                    const value = data.reduce(this.reducer, 0);
+                    this.values[key] = value;
+                });
+            });
+        },
     },
-    // Update internal fields only
-    updateInternalFields: function() {
-      this.internalRowFields = cloneDeep(this.rowFields)
-      this.internalColFields = cloneDeep(this.colFields)
-    }
-  },
-  watch: {
-    // Check if fields changed
-    fields: function(val, oldVal) {
-      if (!isEqual(val[0], oldVal[0])) {
-        // Fields were moved
-        this.updateValues()
-      } else if (!isEqual(val[1], oldVal[1])) {
-        // Field header value filters changed
-        this.updateInternalFields()
-      } else if (!isEqual(val[2], oldVal[2])) {
-        // Field header slot names changed
-        this.updateValues(false)
-      }
+    watch: {
+        colsAndRows: function () {
+            this.computeValues();
+        },
     },
-    data: function() {
-      this.updateValues()
-    }
-  },
-  created: function() {
-    this.updateValues()
-  }
-}
+    created: function () {
+        this.computeValues();
+    },
+};
 </script>
 
 <style scoped>
-td {
-  min-width: 100px;
+.table-responsive-no-bootstrap th {
+    color: #7a869a;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.66666667;
+    letter-spacing: 0;
+    text-transform: none;
+    padding: 7px 10px;
+    text-align: center;
+    vertical-align: top;
+    min-width: 100%;
+}
+.table-responsive-no-bootstrap td {
+    border-top: 1px solid #dfe1e6;
+    padding: 7px 10px;
+    text-align: right;
+    vertical-align: top;
+    min-width: 100%;
+}
+.table-responsive-no-bootstrap tr {
+    background: #fff;
+    color: #172b4d;
+}
+.table-bordered-no-bootstrap,
+.table-responsive-no-bootstrap {
+    width: inherit;
+    max-width: inherit;
+    min-width: inherit;
+}
+.table-bordered-no-bootstrap td,
+.table-bordered-no-bootstrap th {
+    border: 1px solid #dee2e6;
 }
 </style>
